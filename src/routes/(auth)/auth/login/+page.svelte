@@ -26,9 +26,7 @@
 			</Card.Header>
 			<Card.Content>
 				{#if $message}
-					<div
-						class="mb-4 rounded border border-red-500 bg-red-50 px-3 py-2 text-red-700"
-					>
+					<div class="mb-4 rounded border border-red-500 bg-red-50 px-3 py-2 text-red-700">
 						{$message.message}
 					</div>
 				{/if}
@@ -49,15 +47,9 @@
 								{#snippet children({ props })}
 									<div class="flex items-center">
 										<Label>Password</Label>
-										<a href="##" class="ml-auto inline-block text-sm underline">
-											Forgot your password?
-										</a>
+										<a href="##" class="ml-auto inline-block text-sm underline"> Forgot your password? </a>
 									</div>
-									<Input
-										type="password"
-										{...props}
-										bind:value={$formData.password}
-									/>
+									<Input type="password" {...props} bind:value={$formData.password} />
 								{/snippet}
 							</Control>
 						</Field>

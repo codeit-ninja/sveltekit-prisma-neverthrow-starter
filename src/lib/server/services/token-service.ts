@@ -29,11 +29,19 @@ export type TokenNotFoundError = typeof TOKEN_NOT_FOUND;
 export type TokenError = typeof TOKEN_ERROR;
 
 export class TokenService extends Service {
+	/**
+	 * Creates a new token for a user.
+	 * If a token already exists for the user, it returns a `TokenAlreadyExistsError`.
+	 *
+	 * @param userId - The ID of the user to create the token for.
+	 * @param expiresAt - Optional expiration date for the token, defaults to 30 days from now.
+	 * @returns A `ResultAsync` containing the created Token or an error if it already exists or creation fails.
+	 */
 	create(
 		userId: string,
 		expiresAt: Date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30)
 	): ResultAsync<Token, TokenAlreadyExistsError | FailedToCreateTokenError> {
-		return ResultAsync.fromPromise(
+		return fromPromise(
 			this.prisma.token.create({
 				data: {
 					userId,
@@ -43,8 +51,6 @@ export class TokenService extends Service {
 			}),
 			(error) => {
 				if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
-					// This case might be rare if 'token' is a UUID and primary key,
-					// but good to handle if other unique constraints could be violated.
 					return TOKEN_ALREADY_EXISTS;
 				}
 
@@ -53,46 +59,53 @@ export class TokenService extends Service {
 		);
 	}
 
-	async get(token: string): Promise<ResultAsync<Token, TokenNotFoundError | TokenError>> {
-		const tokenResult = await fromPromise(
-			this.prisma.token.findUnique({ where: { token } }),
-			(error) => error as PrismaClientKnownRequestError
-		);
+	/**
+	 * Retrieves a token by its value.
+	 * If the token is expired, it will be deleted and an error will be returned.
+	 *
+	 * @param token - The token string to retrieve.
+	 * @returns A `ResultAsync` containing the Token if found and valid, or an error if not found or expired.
+	 */
+	get(token: string): ResultAsync<Token, TokenNotFoundError | TokenError> {
+		return fromPromise(this.prisma.token.findUnique({ where: { token } }), (error) => {
+			if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2025') {
+				return TOKEN_NOT_FOUND;
+			}
 
-		if (tokenResult.isErr()) {
-			if (tokenResult.error.code === 'P2025') {
+			return TOKEN_ERROR;
+		}).andThen((tokenResult) => {
+			if (!tokenResult) {
 				return err(TOKEN_NOT_FOUND);
 			}
 
-			return err(TOKEN_ERROR);
-		}
-
-		if (!tokenResult.value) {
-			return err(TOKEN_NOT_FOUND);
-		}
-
-		if (tokenResult.value.expiresAt < new Date()) {
-			await this.delete(token);
-			return err(TOKEN_NOT_FOUND);
-		}
-
-		return ok(tokenResult.value);
+			if (tokenResult.expiresAt < new Date()) {
+				return this.delete(token).andThen(() => err(TOKEN_NOT_FOUND));
+			}
+			return ok(tokenResult);
+		});
 	}
 
-	async delete(token: string): Promise<ResultAsync<Token, TokenNotFoundError | TokenError>> {
-		const tokenResult = await fromPromise(
-			this.prisma.token.delete({ where: { token } }),
-			(error) => error as PrismaClientKnownRequestError
-		);
-
-		if (tokenResult.isErr()) {
-			if (tokenResult.error.code === 'P2025') {
-				return err(TOKEN_NOT_FOUND);
+	/**
+	 * Deletes a token by its value.
+	 * If the token does not exist, it returns a `TokenNotFoundError`.
+	 *
+	 * @param token - The token string to delete.
+	 * @returns A `ResultAsync` containing the deleted Token or an error if not found.
+	 */
+	delete(token: string): ResultAsync<Token, TokenNotFoundError | TokenError> {
+		return fromPromise(this.prisma.token.delete({ where: { token } }), (error: unknown) => {
+			if (
+				typeof error === 'object' &&
+				error !== null &&
+				'code' in error &&
+				(error as PrismaClientKnownRequestError).code === 'P2025'
+			) {
+				return TOKEN_NOT_FOUND;
 			}
 
-			return err(TOKEN_ERROR);
-		}
-
-		return ok(tokenResult.value);
+			return TOKEN_ERROR;
+		}).andThen((tokenResult) => {
+			return ok(tokenResult);
+		});
 	}
 }

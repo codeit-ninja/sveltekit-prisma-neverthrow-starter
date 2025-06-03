@@ -1,3 +1,5 @@
+import type { Prisma } from '@prisma/client';
+
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
@@ -5,7 +7,8 @@ declare global {
 		// interface Error {}
 		interface Locals {
 			services: import('$lib/server/services').Services;
-			auth: any;
+			auth: string | undefined;
+			user: Prisma.UserGetPayload<{ include: { profile: true }; omit: { password: true } }> | undefined;
 		}
 		// interface PageData {}
 		// interface PageState {}

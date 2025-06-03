@@ -1,6 +1,6 @@
 import type { Prisma, User } from '@prisma/client';
 import { Service } from './base-service';
-import { err, ok, ResultAsync } from 'neverthrow';
+import { err, fromPromise, ok, ResultAsync } from 'neverthrow';
 import { isObject } from 'lodash-es';
 import type { PrismaClientKnownRequestError } from '@prisma/client/runtime/client';
 
@@ -18,29 +18,52 @@ export type UserNotFoundError = typeof USER_NOT_FOUND;
 export type UserError = typeof USER_ERROR;
 
 export class UserService extends Service {
-	async getUserByEmail(
-		email: string,
-		include?: Prisma.UserInclude
-	): Promise<ResultAsync<User, UserNotFoundError | UserError>> {
-		const defaultInclude: Prisma.UserInclude = {
-			profile: true,
-			token: true,
-			...include
-		};
+	getUserByEmail(email: string, include?: Prisma.UserInclude) {
+		return fromPromise(
+			this.prisma.user.findUniqueOrThrow({
+				where: { email },
+				include: {
+					profile: true,
+					...include
+				}
+			}),
+			(error) => {
+				if (isObject(error) && 'code' in error && error.code === 'P2025') {
+					return USER_NOT_FOUND;
+				}
 
-		const userResult = await ResultAsync.fromPromise(
-			this.prisma.user.findUniqueOrThrow({ where: { email }, include: defaultInclude }),
-			(error) => error as PrismaClientKnownRequestError
-		);
+				return USER_ERROR;
+			}
+		).andThen((user) => {
+			if (!user) {
+				return err(USER_NOT_FOUND);
+			}
+			return ok(user);
+		});
+	}
 
-		if (userResult.isErr()) {
-			if (userResult.error.code === 'P2025') {
+	getUserByToken(token: string, include?: Prisma.UserInclude) {
+		return fromPromise(
+			this.prisma.user.findFirst({
+				where: { token: { some: { token } } },
+				include: {
+					profile: true,
+					...include
+				}
+			}),
+			(error) => {
+				if (isObject(error) && 'code' in error && error.code === 'P2025') {
+					return USER_NOT_FOUND;
+				}
+
+				return USER_ERROR;
+			}
+		).andThen((user) => {
+			if (!user) {
 				return err(USER_NOT_FOUND);
 			}
 
-			return err(USER_ERROR);
-		}
-
-		return ok(userResult.value);
+			return ok(user);
+		});
 	}
 }

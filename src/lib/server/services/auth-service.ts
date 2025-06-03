@@ -23,13 +23,25 @@ export type UserNotFoundError = typeof USER_NOT_FOUND;
 export type InvalidCredentialsError = typeof INVALID_CREDENTIALS;
 export type FailedToCreateTokenError = typeof FAILED_TO_CREATE_TOKEN;
 
-// ...existing code...
 export class AuthService extends Service {
+	/**
+	 * Logs in a user with the provided email and password.
+	 * If the user is not found, it returns a `UserNotFoundError`.
+	 * If the password is invalid, it returns an `InvalidCredentialsError`.
+	 * If the token creation fails, it returns a `FailedToCreateTokenError`.
+	 *
+	 * @param email - The email of the user to log in.
+	 * @param password - The password of the user to log in.
+	 * @returns A `ResultAsync` containing the created Token or an error if login fails.
+	 */
 	login(
 		email: string,
 		password: string
 	): ResultAsync<Token, UserNotFoundError | InvalidCredentialsError | FailedToCreateTokenError> {
-		return fromPromise(this.prisma.user.findUniqueOrThrow({ where: { email } }), (_) => USER_NOT_FOUND)
+		return fromPromise(
+			this.prisma.user.findUniqueOrThrow({ where: { email }, select: { id: true, password: true } }),
+			(_) => USER_NOT_FOUND
+		)
 			.andThen((user) => {
 				return fromPromise(verify(user.password, password), () => INVALID_CREDENTIALS).andThen((isPasswordValid) => {
 					if (!isPasswordValid) {
@@ -43,7 +55,7 @@ export class AuthService extends Service {
 				return this.services
 					.token()
 					.create(user.id)
-					.mapErr(() => FAILED_TO_CREATE_TOKEN); // Map specific token creation error
+					.mapErr(() => FAILED_TO_CREATE_TOKEN);
 			});
 	}
 }

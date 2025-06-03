@@ -5,6 +5,7 @@ import { verify } from 'argon2';
 import prisma from '$lib/prisma';
 import { t } from '$lib/i18n/index.svelte';
 import { redirect } from '@sveltejs/kit';
+import { env } from '$env/dynamic/public';
 
 const INVALID_CREDENTIALS = {
 	type: 'INVALID_CREDENTIALS' as const,
@@ -25,7 +26,6 @@ export const load = async () => {
 export const actions = {
 	default: async ({ request, locals, cookies }) => {
 		const form = await superValidate(request, zod(loginSchema));
-		const user = await locals.services.user().getUserByEmail(form.data.email);
 
 		if (!form.valid) {
 			return message(form, { type: 'FORM_INVALID', message: 'Form validation failed' });
@@ -45,7 +45,7 @@ export const actions = {
 			return message(form, FAILED_TO_AUTHENTICATE);
 		}
 
-		cookies.set('app:auth', tokenResult.value.token, {
+		cookies.set(`${env.PUBLIC_COOKIE_PREFIX || 'app'}-auth`, tokenResult.value.token, {
 			path: '/',
 			expires: tokenResult.value.expiresAt
 		});
