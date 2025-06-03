@@ -23,27 +23,27 @@ export type UserNotFoundError = typeof USER_NOT_FOUND;
 export type InvalidCredentialsError = typeof INVALID_CREDENTIALS;
 export type FailedToCreateTokenError = typeof FAILED_TO_CREATE_TOKEN;
 
+// ...existing code...
 export class AuthService extends Service {
-	async login(
+	login(
 		email: string,
 		password: string
-	): Promise<ResultAsync<Token, UserNotFoundError | InvalidCredentialsError | FailedToCreateTokenError>> {
-		const user = await fromPromise(this.prisma.user.findUniqueOrThrow({ where: { email } }), (error) => error as PrismaClientKnownRequestError);
+	): ResultAsync<Token, UserNotFoundError | InvalidCredentialsError | FailedToCreateTokenError> {
+		return fromPromise(this.prisma.user.findUniqueOrThrow({ where: { email } }), (_) => USER_NOT_FOUND)
+			.andThen((user) => {
+				return fromPromise(verify(user.password, password), () => INVALID_CREDENTIALS).andThen((isPasswordValid) => {
+					if (!isPasswordValid) {
+						return err(INVALID_CREDENTIALS);
+					}
 
-		if (user.isErr()) {
-			return err(USER_NOT_FOUND);
-		}
-
-		if (!(await verify(user.value.password, password))) {
-			return err(INVALID_CREDENTIALS);
-		}
-
-		const token = await this.services.token().create(user.value.id);
-
-		if (token.isErr()) {
-			return err(FAILED_TO_CREATE_TOKEN);
-		}
-
-		return ok(token.value);
+					return ok(user);
+				});
+			})
+			.andThen((user) => {
+				return this.services
+					.token()
+					.create(user.id)
+					.mapErr(() => FAILED_TO_CREATE_TOKEN); // Map specific token creation error
+			});
 	}
 }

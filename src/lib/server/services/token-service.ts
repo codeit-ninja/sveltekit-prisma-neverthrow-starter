@@ -29,27 +29,28 @@ export type TokenNotFoundError = typeof TOKEN_NOT_FOUND;
 export type TokenError = typeof TOKEN_ERROR;
 
 export class TokenService extends Service {
-	async create(
+	create(
 		userId: string,
 		expiresAt: Date = new Date(Date.now() + 1000 * 60 * 60 * 24 * 30)
-	): Promise<ResultAsync<Token, TokenAlreadyExistsError | FailedToCreateTokenError>> {
-		const token = crypto.randomUUID();
-		const createTokenResult = await ResultAsync.fromPromise(
+	): ResultAsync<Token, TokenAlreadyExistsError | FailedToCreateTokenError> {
+		return ResultAsync.fromPromise(
 			this.prisma.token.create({
 				data: {
 					userId,
-					token,
+					token: crypto.randomUUID(),
 					expiresAt
 				}
 			}),
-			(error) => error as PrismaClientKnownRequestError
+			(error) => {
+				if (typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2002') {
+					// This case might be rare if 'token' is a UUID and primary key,
+					// but good to handle if other unique constraints could be violated.
+					return TOKEN_ALREADY_EXISTS;
+				}
+
+				return FAILED_TO_CREATE_TOKEN;
+			}
 		);
-
-		if (createTokenResult.isErr()) {
-			return err(FAILED_TO_CREATE_TOKEN);
-		}
-
-		return ok(createTokenResult.value);
 	}
 
 	async get(token: string): Promise<ResultAsync<Token, TokenNotFoundError | TokenError>> {
